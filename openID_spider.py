@@ -97,6 +97,8 @@ class SchoolGradeCrawler:
             return None
 
     def process_class(self, class_no):
+        class_no = str(int(class_no) + 1)
+        
         for retry in range(self.max_retries):
             try:
                 select_element = self.wait.until(
@@ -167,7 +169,7 @@ class SchoolGradeCrawler:
 
         try:
             with open(filename, 'w', newline='', encoding='utf-8-sig') as file:
-                fieldnames = ['班級人數', '班級', '座號', '帳號']
+                fieldnames = ['班級人數', '班級', '帳號']
                 writer = csv.DictWriter(file, fieldnames=fieldnames)
                 writer.writeheader()
                 
@@ -176,7 +178,6 @@ class SchoolGradeCrawler:
                         row = {
                             '班級人數': class_info['student_count'],
                             '班級': class_info['class'],
-                            '座號': student['seat_no'],
                             '帳號': student['account']
                         }
                         writer.writerow(row)
