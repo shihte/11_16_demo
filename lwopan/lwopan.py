@@ -1,4 +1,3 @@
-import customtkinter as ctk
 from flask import Flask, request, jsonify, send_from_directory
 from flask_cors import CORS
 import csv
@@ -22,118 +21,16 @@ class LwopanServer:
     def __init__(self):
         self.app = Flask(__name__)
         CORS(self.app)
-        self.setup_routes()
         self.server = None
         self.server_thread = None
         self.is_running = False
-        
-    def get_resource_path(self, relative_path):
-        try:
-            if hasattr(sys, '_MEIPASS'):
-                base_path = sys._MEIPASS
-            else:
-                base_path = os.path.abspath(os.path.dirname(__file__))
-            full_path = os.path.join(base_path, relative_path)
-            return full_path
-        except Exception as e:
-            logger.error(f"Error getting resource path: {e}")
-            return os.path.abspath(relative_path)
-
-    def validate_id(self, id_str):
-        try:
-            id_num = int(id_str)
-            return 1 <= id_num <= 184
-        except ValueError:
-            return False
-
-    def opencsv(self, ID):
-        try:
-            file_path = os.path.join('happyread', f"Book_{ID}.csv")
-            with open(file_path, "r", newline="", encoding="utf-8") as open_XID_csv:
-                csv_reader = csv.reader(open_XID_csv)
-                first_column = [row[0] for row in csv_reader]
-                return first_column[1:]
-        except Exception as e:
-            logger.error(f"Error opening CSV: {e}")
-            return []
-
-    def search_in_book_all(self, question_numbers):
-        results = []
-        file_path = os.path.join('happyread', "book_all.csv")
-        try:
-            with open(file_path, "r", newline="", encoding="utf-8") as book_answer:
-                csv_reader = list(csv.reader(book_answer))
-                for number in question_numbers:
-                    found = False
-                    for row in csv_reader:
-                        if row and row[0] == number:
-                            answer = row[6] if row[6] else "未新增解答"
-                            if answer != "未新增解答":
-                                results.append({"question": row[1], "answer": answer})
-                            found = True
-                            break
-                    if not found:
-                        results.append({"question": f"題號 {number}", 
-                                      "answer": "找不到相關題目，請檢查是否有錯字"})
-        except Exception as e:
-            logger.error(f"Error searching book_all: {e}")
-            return [{"question": "錯誤", "answer": "找不到相關題目，請檢查是否有錯字"}]
-        return results
-
-    def search(self, text):
-        results = []
-        file_path = os.path.join('happyread', "book_all.csv")
-        try:
-            with open(file_path, "r", newline="", encoding="utf-8") as book_answer:
-                csv_reader = list(csv.reader(book_answer))
-                if text.isdigit():
-                    found = False
-                    for row in csv_reader:
-                        if row and row[0] == text:
-                            answer = row[6] if row[6] else "未新增解答"
-                            if answer != "未新增解答":
-                                results.append({"question": row[1], "answer": answer})
-                            else:
-                                results.append({"question": text, 
-                                              "answer": "找不到相關題目，請檢查是否有錯字"})
-                            found = True
-                            break
-                    if not found:
-                        results.append({"question": text, 
-                                      "answer": "找不到相關題目，請檢查是否有錯字"})
-                else:
-                    for row in csv_reader:
-                        if row and text.lower() in row[1].lower():
-                            answer = row[6] if row[6] else "未新增解答"
-                            if answer != "未新增解答":
-                                results.append({"question": row[1], "answer": answer})
-        except Exception as e:
-            logger.error(f"Error searching: {e}")
-            return [{"question": text, "answer": "找不到相關題目，請檢查是否有錯字"}]
-
-        if not results:
-            results.append({"question": text, "answer": "找不到相關題目，請檢查是否有錯字"})
-        return results
-
-    def process_input(self, Q):
-        if Q.startswith("https://happyread.kh.edu.tw/"):
-            if "id=" in Q:
-                id_start = Q.index("id=") + 3
-                id_value = Q[id_start:].split("&")[0]
-                if self.validate_id(id_value):
-                    question_numbers = self.opencsv(id_value)
-                    if question_numbers:
-                        results = self.search_in_book_all(question_numbers)
-                        if not results or all(result["answer"] == "未新增解答" 
-                                           for result in results):
-                            return [{"question": Q, 
-                                   "answer": "找不到相關題目，請檢查是否有錯字"}]
-                        return results
-            return [{"question": Q, "answer": "找不到相關題目，請檢查是否有錯字"}]
-        else:
-            return self.search(Q)
+        # 添加基礎路徑
+        self.base_path = self.get_base_path()
+        # 設置路由
+        self.setup_routes()
 
     def setup_routes(self):
+        """設置所有路由"""
         @self.app.route('/')
         def index():
             return send_from_directory('.', 'index.html')
@@ -145,7 +42,7 @@ class LwopanServer:
         @self.app.route('/search', methods=['POST'])
         def search_route():
             data = request.json
-            question = data['question']
+            question = data.get('question', '')
             results = self.process_input(question)
             return jsonify({'result': results})
 
@@ -168,12 +65,150 @@ class LwopanServer:
             else:
                 return send_from_directory('.', '404.html'), 404
 
+    def get_base_path(self):
+        """獲取基礎路徑"""
+        if hasattr(sys, '_MEIPASS'):
+            return sys._MEIPASS
+        return os.path.abspath(os.path.dirname(__file__))
+
+    def get_file_path(self, relative_path):
+        """獲取文件的完整路徑"""
+        return os.path.join(self.base_path, relative_path)
+
+    def validate_id(self, id_str):
+        """驗證ID是否有效"""
+        try:
+            id_num = int(id_str)
+            return 1 <= id_num <= 184
+        except ValueError:
+            return False
+
+    def opencsv(self, ID):
+        """打開並讀取指定ID的CSV文件"""
+        try:
+            file_path = self.get_file_path(os.path.join('happyread', f"Book_{ID}.csv"))
+            logger.info(f"Attempting to open file: {file_path}")
+
+            if not os.path.exists(file_path):
+                logger.error(f"File not found: {file_path}")
+                return []
+
+            with open(file_path, "r", newline="", encoding="utf-8") as open_XID_csv:
+                csv_reader = csv.reader(open_XID_csv)
+                first_column = [row[0] for row in csv_reader]
+                return first_column[1:]
+        except Exception as e:
+            logger.error(f"Error opening CSV {file_path}: {str(e)}")
+            return []
+
+    def search_in_book_all(self, question_numbers):
+        """在book_all.csv中搜索問題編號"""
+        results = []
+        file_path = self.get_file_path(os.path.join('happyread', "book_all.csv"))
+        logger.info(f"Searching in file: {file_path}")
+
+        try:
+            if not os.path.exists(file_path):
+                logger.error(f"Book_all.csv not found: {file_path}")
+                return [{"question": "錯誤", "answer": "數據文件不存在"}]
+
+            with open(file_path, "r", newline="", encoding="utf-8") as book_answer:
+                csv_reader = list(csv.reader(book_answer))
+                for number in question_numbers:
+                    found = False
+                    for row in csv_reader:
+                        if row and row[0] == number:
+                            answer = row[6] if row[6] else "未新增解答"
+                            if answer != "未新增解答":
+                                results.append({"question": row[1], "answer": answer})
+                            found = True
+                            break
+                    if not found:
+                        results.append({
+                            "question": f"題號 {number}",
+                            "answer": "找不到相關題目，請檢查是否有錯字"
+                        })
+        except Exception as e:
+            logger.error(f"Error searching book_all: {str(e)}")
+            return [{"question": "錯誤", "answer": f"讀取文件錯誤: {str(e)}"}]
+        return results
+
+    def search(self, text):
+        """搜索指定文本"""
+        results = []
+        file_path = self.get_file_path(os.path.join('happyread', "book_all.csv"))
+        logger.info(f"Searching text in file: {file_path}")
+
+        try:
+            if not os.path.exists(file_path):
+                logger.error(f"Book_all.csv not found at: {file_path}")
+                return [{"question": text, "answer": "數據文件不存在"}]
+
+            with open(file_path, "r", newline="", encoding="utf-8") as book_answer:
+                csv_reader = list(csv.reader(book_answer))
+                if text.isdigit():
+                    found = False
+                    for row in csv_reader:
+                        if row and row[0] == text:
+                            answer = row[6] if row[6] else "未新增解答"
+                            if answer != "未新增解答":
+                                results.append({"question": row[1], "answer": answer})
+                            else:
+                                results.append({
+                                    "question": text,
+                                    "answer": "找不到相關題目，請檢查是否有錯字"
+                                })
+                            found = True
+                            break
+                    if not found:
+                        results.append({
+                            "question": text,
+                            "answer": "找不到相關題目，請檢查是否有錯字"
+                        })
+                else:
+                    for row in csv_reader:
+                        if row and text.lower() in row[1].lower():
+                            answer = row[6] if row[6] else "未新增解答"
+                            if answer != "未新增解答":
+                                results.append({"question": row[1], "answer": answer})
+        except Exception as e:
+            logger.error(f"Error searching text: {str(e)}")
+            return [{"question": text, "answer": f"讀取文件錯誤: {str(e)}"}]
+
+        if not results:
+            results.append({
+                "question": text,
+                "answer": "找不到相關題目，請檢查是否有錯字"
+            })
+        return results
+
+    def process_input(self, Q):
+        """處理輸入查詢"""
+        if Q.startswith("https://happyread.kh.edu.tw/"):
+            if "id=" in Q:
+                id_start = Q.index("id=") + 3
+                id_value = Q[id_start:].split("&")[0]
+                if self.validate_id(id_value):
+                    question_numbers = self.opencsv(id_value)
+                    if question_numbers:
+                        results = self.search_in_book_all(question_numbers)
+                        if not results or all(result["answer"] == "未新增解答" 
+                                           for result in results):
+                            return [{"question": Q, 
+                                   "answer": "找不到相關題目，請檢查是否有錯字"}]
+                        return results
+            return [{"question": Q, "answer": "找不到相關題目，請檢查是否有錯字"}]
+        else:
+            return self.search(Q)
+
     def run_server_thread(self, host, port):
+        """在線程中運行服務器"""
         self.server = make_server(host, port, self.app)
         self.is_running = True
         self.server.serve_forever()
 
     def start_server(self, host='127.0.0.1', port=5000):
+        """啟動服務器"""
         if not self.is_running:
             self.server_thread = threading.Thread(
                 target=self.run_server_thread,
@@ -181,12 +216,13 @@ class LwopanServer:
             )
             self.server_thread.daemon = True
             self.server_thread.start()
-            time.sleep(1)  # 等待伺服器啟動
+            time.sleep(1)
             logger.info(f"Server started at http://{host}:{port}")
             return True
         return False
 
     def stop_server(self):
+        """停止服務器"""
         if self.is_running and self.server:
             self.is_running = False
             self.server.shutdown()
@@ -197,124 +233,23 @@ class LwopanServer:
             return True
         return False
 
-class ServerGUI:
-    def __init__(self):
-        self.server = LwopanServer()
-        self.setup_gui()
-        
-    def setup_gui(self):
-        ctk.set_appearance_mode("dark")
-        ctk.set_default_color_theme("blue")
-        
-        self.root = ctk.CTk()
-        self.root.title("lwopan Server Controller")
-        self.root.geometry("400x600")
-        
-        title_frame = ctk.CTkFrame(self.root, corner_radius=0)
-        title_frame.pack(fill="x", padx=20, pady=(20,10))
-        
-        title_label = ctk.CTkLabel(
-            title_frame, 
-            text="lwopan 伺服器控制台",
-            font=("Arial", 24, "bold")
-        )
-        title_label.pack(pady=20)
-
-        self.status_label = ctk.CTkLabel(
-            title_frame,
-            text="伺服器狀態: 已停止",
-            font=("Arial", 14)
-        )
-        self.status_label.pack(pady=10)
-        
-        button_frame = ctk.CTkFrame(self.root)
-        button_frame.pack(fill="both", expand=True, padx=20, pady=20)
-        
-        self.start_button = ctk.CTkButton(
-            button_frame,
-            text="啟動伺服器",
-            command=self.start_server,
-            font=("Arial", 14),
-            height=40
-        )
-        self.start_button.pack(pady=20, padx=40, fill="x")
-        
-        self.open_button = ctk.CTkButton(
-            button_frame,
-            text="開啟網頁",
-            command=self.open_browser,
-            font=("Arial", 14),
-            height=40,
-            state="disabled"
-        )
-        self.open_button.pack(pady=20, padx=40, fill="x")
-        
-        self.stop_button = ctk.CTkButton(
-            button_frame,
-            text="停止伺服器",
-            command=self.stop_server,
-            font=("Arial", 14),
-            height=40,
-            state="disabled"
-        )
-        self.stop_button.pack(pady=20, padx=40, fill="x")
-        
-        self.exit_button = ctk.CTkButton(
-            button_frame,
-            text="退出程式",
-            command=self.exit_application,
-            font=("Arial", 14),
-            height=40,
-            fg_color="#FF5252",
-            hover_color="#FF1A1A"
-        )
-        self.exit_button.pack(pady=20, padx=40, fill="x")
-
-        copyright_label = ctk.CTkLabel(
-            self.root,
-            text="© 2024 lwopan. All rights reserved.",
-            font=("Arial", 12),
-            text_color="gray"
-        )
-        copyright_label.pack(pady=10)
-
-        # 設置關閉窗口的處理
-        self.root.protocol("WM_DELETE_WINDOW", self.exit_application)
-
-    def start_server(self):
-        if self.server.start_server():
-            self.status_label.configure(text="伺服器狀態: 運行中")
-            self.start_button.configure(state="disabled")
-            self.open_button.configure(state="normal")
-            self.stop_button.configure(state="normal")
-            logger.info("Server started successfully")
-
-    def stop_server(self):
-        if self.server.stop_server():
-            self.status_label.configure(text="伺服器狀態: 已停止")
-            self.start_button.configure(state="normal")
-            self.open_button.configure(state="disabled")
-            self.stop_button.configure(state="disabled")
-            logger.info("Server stopped successfully")
-
-    def open_browser(self):
-        webbrowser.open('http://127.0.0.1:5000')
-        logger.info("Browser opened")
-
-    def exit_application(self):
-        if self.server.is_running:
-            self.stop_server()
-        self.root.quit()
-        self.root.destroy()
-        os._exit(0)  # 強制結束所有線程
-
-    def run(self):
-        self.root.mainloop()
-
 def main():
     try:
-        app = ServerGUI()
-        app.run()
+        server = LwopanServer()
+        if server.start_server():
+            logger.info("Server started successfully")
+            # 打開瀏覽器
+            webbrowser.open('http://127.0.0.1:5000')
+            
+            # 等待用戶按 Ctrl+C 停止服務器
+            def signal_handler(sig, frame):
+                logger.info("Stopping server...")
+                server.stop_server()
+                sys.exit(0)
+            
+            signal.signal(signal.SIGINT, signal_handler)
+            signal.pause()
+            
     except Exception as e:
         # 保存錯誤信息到文件
         with open('error_log.txt', 'w') as f:
@@ -331,4 +266,4 @@ if __name__ == "__main__":
         with open('error_log.txt', 'w') as f:
             f.write(f"Critical Error: {str(e)}\n")
             f.write(traceback.format_exc())
-        sys.exit()
+        sys.exit(1)
